@@ -63,11 +63,10 @@ public class WxMpServiceImpl implements WxMpService {
     private final static String UNSUBSCRIBELOGINTICKET = "qrscene_2";
     // 用户信息缓存前缀
     private final static String USERINFOPREFIX = "userinfo_";
-
-    @Resource
-    private RedisTemplate<String, Object> redisTemplate;
     private final StringRedisTemplate stringRedisTemplate;
     private final WechatConfig wechatConfig;
+    @Resource
+    private RedisTemplate<String, Object> redisTemplate;
 
     public WxMpServiceImpl(StringRedisTemplate stringRedisTemplate, WechatConfig wechatConfig) {
         this.stringRedisTemplate = stringRedisTemplate;
@@ -82,16 +81,12 @@ public class WxMpServiceImpl implements WxMpService {
         String timestamp = request.getParameter("timestamp");
         String nonce = request.getParameter("nonce");
         String echostr = request.getParameter("echostr");
-        PrintWriter out = null;
-        try {
-            out = response.getWriter();
+        try (PrintWriter out = response.getWriter()) {
             if (WxUtil.checkSignature(signature, timestamp, nonce)) {
                 out.write(echostr);
             }
         } catch (IOException e) {
             e.printStackTrace();
-        } finally {
-            out.close();
         }
     }
 
@@ -101,7 +96,7 @@ public class WxMpServiceImpl implements WxMpService {
         // 获取消息类型
         String msgType = parseXml.get("MsgType");
         // 获取消息内容
-        String content = parseXml.get("Content");
+//        String content = parseXml.get("Content");
         // 获取发送方
         String fromusername = parseXml.get("FromUserName");
         // 获取接收方
@@ -122,8 +117,6 @@ public class WxMpServiceImpl implements WxMpService {
             // 把用户信息放入缓存
             redisTemplate.opsForValue().set(USERINFOPREFIX + fromusername, userInfo, 60L, TimeUnit.MINUTES);
         }
-
-//        System.out.println(parseXml);
 
         // 构造返回结果
         HashMap<String, String> resultMap = new HashMap<>();
@@ -147,41 +140,38 @@ public class WxMpServiceImpl implements WxMpService {
                     // 通过扫描作品链接二维码--已关注
                     case GETWORKS: {
                         HashMap<String, WorkInfo> infoHashMap = (HashMap<String, WorkInfo>) redisTemplate.opsForValue().get(ticket);
+                        assert infoHashMap != null;
                         WorkInfo workInfo = infoHashMap.get(ticket);
                         resultMap.put("Content", "作品名字" + "\n" + "<a href=\"" + workInfo.getWorkUrl() + "\">" + workInfo.getWorkName() + "</a>" + "\n" + "[旺柴][捂脸][呲牙][难过][微笑][流泪]\uD83D\uDE02[委屈]");
-                        String mapToXml = WxUtil.mapToXml(resultMap);
-                        return mapToXml;
+                        return WxUtil.mapToXml(resultMap);
                     }
                     // 通过扫描二维码登录--已关注
                     case LOGINORREGISTER: {
                         resultMap.put("Content", "微信已经授权,请等待网页跳转");
                         stringRedisTemplate.opsForValue().set(LOGINTICKET + ticket, fromusername, 14400L, TimeUnit.SECONDS);
-                        String mapToXml = WxUtil.mapToXml(resultMap);
-                        return mapToXml;
-
+                        return WxUtil.mapToXml(resultMap);
                     }
                     // 通过扫描作品链接二维码--未关注
                     case UNSUBSCRIBEGETWORKS: {
                         HashMap<String, WorkInfo> infoHashMap = (HashMap<String, WorkInfo>) redisTemplate.opsForValue().get(ticket);
+                        assert infoHashMap != null;
                         WorkInfo workInfo = infoHashMap.get(ticket);
                         resultMap.put("Content", "感谢关注" + "\n这是作品链接\n" + "<a href=\"" + workInfo.getWorkUrl() + "\">" + workInfo.getWorkName() + "</a>" + "\n" + "[旺柴][捂脸][呲牙][难过][微笑][流泪]\uD83D\uDE02[委屈]");
-                        String mapToXml = WxUtil.mapToXml(resultMap);
-                        return mapToXml;
+                        return WxUtil.mapToXml(resultMap);
                     }
                     // 通过扫描二维码登录--未关注
                     case UNSUBSCRIBELOGINTICKET: {
                         resultMap.put("Content", "感谢关注,微信已经授权,请等待网页跳转");
                         stringRedisTemplate.opsForValue().set(LOGINTICKET + ticket, fromusername, 14400L, TimeUnit.SECONDS);
-                        String mapToXml = WxUtil.mapToXml(resultMap);
-                        return mapToXml;
+                        return WxUtil.mapToXml(resultMap);
                     }
                     default:
                         break;
                 }
             }
-            if (content != null) {
-
-            }
+//            if (content != null) {
+//
+//            }
         }
         return WxUtil.mapToXml(resultMap);
     }
@@ -193,8 +183,7 @@ public class WxMpServiceImpl implements WxMpService {
         parms.put("appid", appid);
         parms.put("secret", appSecrect);
         String s = HttpUtil.doGet(GETACCESSTOKENURL, parms);
-        AccessToken accessToken = JsonUtil.fromJson(s, AccessToken.class);
-        return accessToken;
+        return JsonUtil.fromJson(s, AccessToken.class);
     }
 
     @Override
@@ -217,9 +206,7 @@ public class WxMpServiceImpl implements WxMpService {
     @Override
     public RespDto checkLogin(String ticket) {
         String openId = stringRedisTemplate.opsForValue().get(LOGINTICKET + ticket);
-        if (openId == null || openId.equals("")) {
-            return new RespDto(200, "未登录", null);
-        }
+        if (openId == null || "".equals(openId)) return new RespDto(200, "未登录", null);
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         JSONObject userInfoByOpenId = getUserInfoByOpenId(openId);
         pushMessage(openId, userInfoByOpenId.getString("nickname"), sdf.format(new Date()));
@@ -256,7 +243,7 @@ public class WxMpServiceImpl implements WxMpService {
             templateMessage.addData(new WxMpTemplateData(String.valueOf(i + 1), values[i], "#173177"));
         }
         try {
-            String msg = wxMpService.getTemplateMsgService().sendTemplateMsg(templateMessage);
+            wxMpService.getTemplateMsgService().sendTemplateMsg(templateMessage);
         } catch (Exception e) {
             e.printStackTrace();
         }
