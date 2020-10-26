@@ -9,7 +9,6 @@ import com.gouzhong1223.wxmptest.service.QrCodeService;
 import com.gouzhong1223.wxmptest.util.EncodeUtils;
 import com.gouzhong1223.wxmptest.util.HttpUtil;
 import com.gouzhong1223.wxmptest.util.JsonUtil;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.TreeMap;
@@ -29,15 +28,13 @@ import java.util.TreeMap;
 public class QrCodeServiceImpl implements QrCodeService {
 
     private final WechatConfig wechatConfig;
-    private final RedisTemplate redisTemplate;
 
-    public QrCodeServiceImpl(WechatConfig wechatConfig, RedisTemplate redisTemplate) {
+    public QrCodeServiceImpl(WechatConfig wechatConfig) {
         this.wechatConfig = wechatConfig;
-        this.redisTemplate = redisTemplate;
     }
 
     @Override
-    public String createTempTicket(String accessToken, int sceneId, int expireSeconds, String qRInfo) {
+    public String createTempTicket(String accessToken, int sceneId, int expireSeconds, String qrInfo) {
         TreeMap<String, String> params = new TreeMap<>();
         params.put("access_token", accessToken);
         // output data
@@ -46,7 +43,7 @@ public class QrCodeServiceImpl implements QrCodeService {
         data.addProperty("expire_seconds", expireSeconds);
         JsonObject scene = new JsonObject();
         scene.addProperty("scene_id", sceneId);
-        scene.addProperty("action_info", qRInfo);
+        scene.addProperty("action_info", qrInfo);
         JsonObject actionInfo = new JsonObject();
         actionInfo.add("scene", scene);
         data.add("action_info", actionInfo);
@@ -56,7 +53,7 @@ public class QrCodeServiceImpl implements QrCodeService {
     }
 
     @Override
-    public String createTempTicket(String accessToken, String sceneStr, int expireSeconds, String qRInfo) {
+    public String createTempTicket(String accessToken, String sceneStr, int expireSeconds, String qrInfo) {
         TreeMap<String, String> params = new TreeMap<>();
         params.put("access_token", accessToken);
         // output data
@@ -65,7 +62,7 @@ public class QrCodeServiceImpl implements QrCodeService {
         data.addProperty("expire_seconds", expireSeconds);
         JsonObject scene = new JsonObject();
         scene.addProperty("scene_str", sceneStr);
-        scene.addProperty("action_info", qRInfo);
+        scene.addProperty("action_info", qrInfo);
         JsonObject actionInfo = new JsonObject();
         actionInfo.add("scene", scene);
         data.add("action_info", actionInfo);
@@ -112,9 +109,7 @@ public class QrCodeServiceImpl implements QrCodeService {
     @Override
     public String showQrCode(String accessToken, String ticket, boolean isShortUrl) {
         String url = String.format(wechatConfig.getShowQrcodeUrl(), EncodeUtils.urlEncode(ticket));
-        if (isShortUrl) {
-            return toShortQRCodeurl(accessToken, url);
-        }
+        if (isShortUrl) return toShortQrCodeurl(accessToken, url);
         return url;
     }
 
@@ -125,7 +120,7 @@ public class QrCodeServiceImpl implements QrCodeService {
      * @param longUrl     长链接
      * @return
      */
-    private String toShortQRCodeurl(String accessToken, String longUrl) {
+    private String toShortQrCodeurl(String accessToken, String longUrl) {
         TreeMap<String, String> params = new TreeMap<>();
         params.put("access_token", accessToken);
         JsonObject data = new JsonObject();
@@ -133,8 +128,8 @@ public class QrCodeServiceImpl implements QrCodeService {
         data.addProperty("long_url", longUrl);
         String result = HttpUtil.doPost(wechatConfig.getShortQrcodeUrl(),
                 params, data.toString());
-        WechatQRCodeShortUrl wechatQRCodeShortUrl = JsonUtil.fromJson(result, WechatQRCodeShortUrl.class);
-        return wechatQRCodeShortUrl == null ? null : wechatQRCodeShortUrl.getShortUrl();
+        WechatQRCodeShortUrl wechatQrCodeShortUrl = JsonUtil.fromJson(result, WechatQRCodeShortUrl.class);
+        return wechatQrCodeShortUrl == null ? null : wechatQrCodeShortUrl.getShortUrl();
     }
 
 

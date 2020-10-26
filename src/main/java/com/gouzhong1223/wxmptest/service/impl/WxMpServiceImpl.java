@@ -170,7 +170,7 @@ public class WxMpServiceImpl implements WxMpService {
                 }
             }
 //            if (content != null) {
-//
+//                 这里是用户向公众号发送消息的业务
 //            }
         }
         return WxUtil.mapToXml(resultMap);
