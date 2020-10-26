@@ -18,6 +18,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -56,16 +57,23 @@ public class WxMpServiceImpl implements WxMpService {
     public static final String LOGINTICKET = "loginticket_";
     // redis 中的 accesstoken
     private final static String ACCESSTOKENKEY = "accesstoken";
+    // 未关注-扫描作品二维码
+    private final static String UNSUBSCRIBEGETWORKS = "qrscene_1";
+    // 未关注-扫描登录
+    private final static String UNSUBSCRIBELOGINTICKET = "qrscene_2";
+    // 用户信息缓存前缀
+    private final static String USERINFOPREFIX = "userinfo_";
 
-    private final RedisTemplate<String, HashMap<String, WorkInfo>> redisTemplate;
+    @Resource
+    private RedisTemplate<String, Object> redisTemplate;
     private final StringRedisTemplate stringRedisTemplate;
     private final WechatConfig wechatConfig;
 
-    public WxMpServiceImpl(RedisTemplate redisTemplate, StringRedisTemplate stringRedisTemplate, WechatConfig wechatConfig) {
-        this.redisTemplate = redisTemplate;
+    public WxMpServiceImpl(StringRedisTemplate stringRedisTemplate, WechatConfig wechatConfig) {
         this.stringRedisTemplate = stringRedisTemplate;
         this.wechatConfig = wechatConfig;
     }
+
 
     @Override
     public void auth(HttpServletRequest request, HttpServletResponse response) {
@@ -98,60 +106,88 @@ public class WxMpServiceImpl implements WxMpService {
         String fromusername = parseXml.get("FromUserName");
         // 获取接收方
         String tousername = parseXml.get("ToUserName");
-
+        // 获取二维码Ticket
         String ticket = parseXml.get("Ticket");
+        // 获取推送事件
+        String event = parseXml.get("Event");
+        // EventKey
+        String eventKey = parseXml.get("EventKey");
 
-        System.out.println(parseXml);
+        // 到缓存里面去取出用户信息
+        JSONObject userInfo = (JSONObject) redisTemplate.opsForValue().get(USERINFOPREFIX + fromusername);
+        if (userInfo == null) {
+            // 获取用户信息
+            userInfo = getUserInfoByOpenId(fromusername);
 
+            // 把用户信息放入缓存
+            redisTemplate.opsForValue().set(USERINFOPREFIX + fromusername, userInfo, 60L, TimeUnit.MINUTES);
+        }
+
+//        System.out.println(parseXml);
+
+        // 构造返回结果
         HashMap<String, String> resultMap = new HashMap<>();
         resultMap.put("ToUserName", fromusername);
         resultMap.put("FromUserName", tousername);
         resultMap.put("CreateTime", LocalDate.now().toString());
+        resultMap.put("MsgType", "text");
 
+        // 判断是否为事件推送
         if (msgType.equalsIgnoreCase(MsgType.SHIJIAN.getMsgtype())) {
-
+            // 判断是否为直接关注
+            if ("subscribe".equals(event) && ticket == null) {
+                resultMap.put("Content", userInfo.getString("nickname") + "感谢关注");
+                // 返回
+                return WxUtil.mapToXml(resultMap);
+            }
+            // 说明是扫描带参数二维码推送的消息
             if (ticket != null) {
-                String eventKey = parseXml.get("EventKey");
                 switch (eventKey) {
+
+                    // 通过扫描作品链接二维码--已关注
                     case GETWORKS: {
-                        HashMap<String, WorkInfo> infoHashMap = redisTemplate.opsForValue().get(ticket);
+                        HashMap<String, WorkInfo> infoHashMap = (HashMap<String, WorkInfo>) redisTemplate.opsForValue().get(ticket);
                         WorkInfo workInfo = infoHashMap.get(ticket);
-                        resultMap.put("MsgType", "text");
-                        resultMap.put("Content", "这是标题" + "\n" + "<a href=\"" + workInfo.getWorkUrl() + "\">" + workInfo.getWorkName() + "</a>" + "\n" + "[旺柴][捂脸][呲牙][难过][微笑][流泪]\uD83D\uDE02[委屈]");
+                        resultMap.put("Content", "作品名字" + "\n" + "<a href=\"" + workInfo.getWorkUrl() + "\">" + workInfo.getWorkName() + "</a>" + "\n" + "[旺柴][捂脸][呲牙][难过][微笑][流泪]\uD83D\uDE02[委屈]");
                         String mapToXml = WxUtil.mapToXml(resultMap);
                         return mapToXml;
                     }
+                    // 通过扫描二维码登录--已关注
                     case LOGINORREGISTER: {
-
-                        resultMap.put("MsgType", "text");
-                        resultMap.put("Content", "微信已经授权，请等待网页跳转");
+                        resultMap.put("Content", "微信已经授权,请等待网页跳转");
                         stringRedisTemplate.opsForValue().set(LOGINTICKET + ticket, fromusername, 14400L, TimeUnit.SECONDS);
                         String mapToXml = WxUtil.mapToXml(resultMap);
                         return mapToXml;
 
                     }
+                    // 通过扫描作品链接二维码--未关注
+                    case UNSUBSCRIBEGETWORKS: {
+                        HashMap<String, WorkInfo> infoHashMap = (HashMap<String, WorkInfo>) redisTemplate.opsForValue().get(ticket);
+                        WorkInfo workInfo = infoHashMap.get(ticket);
+                        resultMap.put("Content", "感谢关注" + "\n这是作品链接\n" + "<a href=\"" + workInfo.getWorkUrl() + "\">" + workInfo.getWorkName() + "</a>" + "\n" + "[旺柴][捂脸][呲牙][难过][微笑][流泪]\uD83D\uDE02[委屈]");
+                        String mapToXml = WxUtil.mapToXml(resultMap);
+                        return mapToXml;
+                    }
+                    // 通过扫描二维码登录--未关注
+                    case UNSUBSCRIBELOGINTICKET: {
+                        resultMap.put("Content", "感谢关注,微信已经授权,请等待网页跳转");
+                        stringRedisTemplate.opsForValue().set(LOGINTICKET + ticket, fromusername, 14400L, TimeUnit.SECONDS);
+                        String mapToXml = WxUtil.mapToXml(resultMap);
+                        return mapToXml;
+                    }
                     default:
                         break;
-
                 }
-                HashMap<String, WorkInfo> infoHashMap = redisTemplate.opsForValue().get(ticket);
-                WorkInfo workInfo = infoHashMap.get(ticket);
-                resultMap.put("MsgType", "text");
-                resultMap.put("Content", "这是标题" + "\n" + "<a href=\"" + workInfo.getWorkUrl() + "\">" + workInfo.getWorkName() + "</a>" + "\n" + "[旺柴][捂脸][呲牙][难过][微笑][流泪]\uD83D\uDE02[委屈]");
-                String mapToXml = WxUtil.mapToXml(resultMap);
-                return mapToXml;
+            }
+            if (content != null) {
+
             }
         }
-
-        // 构造消息返回体
-        System.out.println(parseXml);
-
-        return null;
+        return WxUtil.mapToXml(resultMap);
     }
 
     @Override
     public AccessToken getToken(String appid, String appSecrect) {
-
         HashMap<String, String> parms = new HashMap<>();
         parms.put("grant_type", "client_credential");
         parms.put("appid", appid);
@@ -163,14 +199,19 @@ public class WxMpServiceImpl implements WxMpService {
 
     @Override
     public JSONObject getUserInfoByOpenId(String openid) {
-        String accesstoken = stringRedisTemplate.opsForValue().get(ACCESSTOKENKEY);
-        HashMap<String, String> parms = new HashMap<>();
-        parms.put("access_token", accesstoken);
-        parms.put("openid", openid);
-        parms.put("lang", "zh_CN");
-        String doGet = HttpUtil.doGet(URLGETUSERINFO, parms);
-        JSONObject jsonObject = JSON.parseObject(doGet);
-        return jsonObject;
+        JSONObject userInfo = (JSONObject) redisTemplate.opsForValue().get(USERINFOPREFIX + openid);
+        if (userInfo == null) {
+            String accesstoken = stringRedisTemplate.opsForValue().get(ACCESSTOKENKEY);
+            HashMap<String, String> parms = new HashMap<>();
+            parms.put("access_token", accesstoken);
+            parms.put("openid", openid);
+            parms.put("lang", "zh_CN");
+            String doGet = HttpUtil.doGet(URLGETUSERINFO, parms);
+            userInfo = JSON.parseObject(doGet);
+            // 将查询到的用户信息放入缓存
+            redisTemplate.opsForValue().set(USERINFOPREFIX + openid, userInfo, 60L, TimeUnit.MINUTES);
+        }
+        return userInfo;
     }
 
     @Override
@@ -182,7 +223,8 @@ public class WxMpServiceImpl implements WxMpService {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         JSONObject userInfoByOpenId = getUserInfoByOpenId(openId);
         pushMessage(openId, userInfoByOpenId.getString("nickname"), sdf.format(new Date()));
-        return new RespDto(200, "登陆成功", userInfoByOpenId);
+        stringRedisTemplate.delete(LOGINTICKET + ticket);
+        return new RespDto<>(200, "登陆成功", userInfoByOpenId);
     }
 
     @Override
@@ -202,9 +244,10 @@ public class WxMpServiceImpl implements WxMpService {
                 //要推送的用户openid
                 .toUser(openId)
                 //模板id
+                // TODO 到时候需要更换成自己的模板 ID
                 .templateId("O3OiVR3tfPd-DMMqMKLPgS-l6ihtCq9BYIyimLEl6iQ")
                 //点击模板消息要访问的网址
-                //TODO 到时候换成拼接的 URL
+                //TODO 到时候换成拼接的 URL----最好是作为参数传进来
                 .url("www.baidu.com")
                 .build();
         //3,如果是正式版发送消息，，这里需要配置你的信息

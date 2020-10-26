@@ -438,7 +438,4 @@ public class HttpUtil {
         }
     }
 
-    public static void main(String[] args) {
-        System.out.println(getFileExt("image/jpeg"));
-    }
 }
