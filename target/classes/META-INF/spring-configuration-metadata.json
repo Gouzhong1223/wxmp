@@ -1,0 +1,31 @@
+{
+  "groups": [],
+  "properties": [
+    {
+      "name": "wx.appId",
+      "type": "java.lang.String",
+      "description": "Description for wx.appId."
+    },
+    {
+      "name": "wx.appsecret",
+      "type": "java.lang.String",
+      "description": "Description for wx.appsecret."
+    },
+    {
+      "name": "wx.createTicketUrl",
+      "type": "java.lang.String",
+      "description": "Description for wx.createTicketUrl."
+    },
+    {
+      "name": "wx.shortQrcodeUrl",
+      "type": "java.lang.String",
+      "description": "Description for wx.shortQrcodeUrl."
+    },
+    {
+      "name": "wx.showQrcodeUrl",
+      "type": "java.lang.String",
+      "description": "Description for wx.showQrcodeUrl."
+    }
+  ],
+  "hints": []
+}
