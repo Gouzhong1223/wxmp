@@ -13,8 +13,8 @@ wx:
   createTicketUrl: https://api.weixin.qq.com/cgi-bin/qrcode/create
   showQrcodeUrl: https://mp.weixin.qq.com/cgi-bin/showqrcode?ticket=%s
   shortQrcodeUrl: https://api.weixin.qq.com/cgi-bin/shorturl
-  appId: wxa34e5832306659b7
-  appsecret: de44974b26cb09b5d8745b7a4eb1e03d
+  appId: ******************
+  appsecret: **************
 
 
 
